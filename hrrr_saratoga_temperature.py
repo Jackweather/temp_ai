@@ -32,6 +32,9 @@ DEFAULT_TIMEOUT = 30
 PLOT_RETENTION_COUNT = 24
 ARCHIVE_RETENTION_DAYS = 30
 LOCAL_TIMEZONE = ZoneInfo("America/New_York")
+SYNOPTIC_CYCLE_HOURS = frozenset({0, 6, 12, 18})
+SYNOPTIC_RUN_COMPLETION_DELAY = timedelta(hours=2)
+SYNOPTIC_RUN_MIN_FORECAST_HOUR = 48
 
 
 @dataclass(frozen=True)
@@ -115,8 +118,35 @@ def latest_manifest_path(base_dir: Path) -> Path:
     return base_dir / LATEST_RUN_FILENAME
 
 
+def is_synoptic_cycle(cycle_hour: int) -> bool:
+    return cycle_hour in SYNOPTIC_CYCLE_HOURS
+
+
+def is_run_ready(run: HrrrRun, now_utc: datetime) -> bool:
+    if not run.forecast_hours:
+        return False
+    if not is_synoptic_cycle(run.cycle_hour):
+        return True
+    if now_utc < run.run_time_utc + SYNOPTIC_RUN_COMPLETION_DELAY:
+        return False
+    return run.forecast_hours[-1] >= SYNOPTIC_RUN_MIN_FORECAST_HOUR
+
+
+def active_synoptic_hold_latest_run_time(now_utc: datetime) -> datetime | None:
+    for day_offset in (0, -1):
+        cycle_date = (now_utc + timedelta(days=day_offset)).date()
+        for cycle_hour in sorted(SYNOPTIC_CYCLE_HOURS, reverse=True):
+            cycle_time = datetime.combine(cycle_date, datetime.min.time(), tzinfo=timezone.utc)
+            cycle_time += timedelta(hours=cycle_hour)
+            if cycle_time <= now_utc < cycle_time + SYNOPTIC_RUN_COMPLETION_DELAY:
+                return cycle_time - timedelta(hours=1)
+    return None
+
+
 def discover_latest_run(session: requests.Session, lookback_days: int) -> HrrrRun:
-    today_utc = datetime.now(timezone.utc).date()
+    now_utc = datetime.now(timezone.utc)
+    today_utc = now_utc.date()
+    latest_allowed_run_time = active_synoptic_hold_latest_run_time(now_utc)
     run_pattern = re.compile(r"hrrr\.t(\d{2})z\.wrfsfcf00\.grib2")
 
     for offset in range(lookback_days + 1):
@@ -131,15 +161,20 @@ def discover_latest_run(session: requests.Session, lookback_days: int) -> HrrrRu
             forecast_pattern = re.compile(
                 rf"hrrr\.t{cycle_hour:02d}z\.wrfsfcf(\d{{2}})\.grib2"
             )
-            forecast_hours = tuple(
-                sorted({int(match) for match in forecast_pattern.findall(response.text)})
+            candidate_run = HrrrRun(
+                run_date=run_date,
+                cycle_hour=cycle_hour,
+                forecast_hours=tuple(
+                    sorted({int(match) for match in forecast_pattern.findall(response.text)})
+                ),
             )
-            if forecast_hours:
-                return HrrrRun(
-                    run_date=run_date,
-                    cycle_hour=cycle_hour,
-                    forecast_hours=forecast_hours,
-                )
+            if (
+                latest_allowed_run_time is not None
+                and candidate_run.run_time_utc > latest_allowed_run_time
+            ):
+                continue
+            if is_run_ready(candidate_run, now_utc):
+                return candidate_run
 
     raise RuntimeError("Could not find an available HRRR run in the requested lookback window.")
 
