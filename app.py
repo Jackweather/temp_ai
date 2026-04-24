@@ -144,6 +144,33 @@ def prune_nws_archives(base_dir: Path, retention_days: int = NWS_RETENTION_DAYS)
             archive_path.unlink(missing_ok=True)
 
 
+def select_current_hourly_period(periods: list[dict]) -> tuple[dict, int]:
+    now_local = datetime.now(LOCAL_TIMEZONE)
+    current_hour_start = now_local.replace(minute=0, second=0, microsecond=0)
+
+    for forecast_hour, period in enumerate(periods):
+        period_start = datetime.fromisoformat(period["startTime"]).astimezone(LOCAL_TIMEZONE)
+        period_end_text = period.get("endTime")
+        if period_end_text:
+            period_end = datetime.fromisoformat(period_end_text).astimezone(LOCAL_TIMEZONE)
+            if period_start <= current_hour_start < period_end:
+                return period, forecast_hour
+        elif period_start == current_hour_start:
+            return period, forecast_hour
+
+    future_periods = []
+    for forecast_hour, period in enumerate(periods):
+        period_start = datetime.fromisoformat(period["startTime"]).astimezone(LOCAL_TIMEZONE)
+        if period_start >= current_hour_start:
+            future_periods.append((period_start, forecast_hour, period))
+
+    if future_periods:
+        _, forecast_hour, period = min(future_periods, key=lambda item: item[0])
+        return period, forecast_hour
+
+    return periods[-1], len(periods) - 1
+
+
 def fetch_nws_hourly_forecast(
     lat: float = DEFAULT_LAT,
     lon: float = DEFAULT_LON,
@@ -175,20 +202,7 @@ def fetch_nws_hourly_forecast(
     if not periods:
         raise RuntimeError("NWS hourly forecast response did not contain any periods.")
 
-    now_local = datetime.now(LOCAL_TIMEZONE)
-    current_hour_start = now_local.replace(minute=0, second=0, microsecond=0)
-    selected_period = None
-    selected_forecast_hour = 0
-
-    for forecast_hour, period in enumerate(periods):
-        period_start = datetime.fromisoformat(period["startTime"]).astimezone(LOCAL_TIMEZONE)
-        if period_start >= current_hour_start:
-            selected_period = period
-            selected_forecast_hour = forecast_hour
-            break
-
-    if selected_period is None:
-        selected_period = periods[0]
+    selected_period, selected_forecast_hour = select_current_hourly_period(periods)
 
     valid_time_local = datetime.fromisoformat(selected_period["startTime"]).astimezone(LOCAL_TIMEZONE)
     valid_time_utc = valid_time_local.astimezone(timezone.utc)
@@ -211,6 +225,7 @@ def fetch_nws_hourly_forecast(
     payload = {
         "location": location_name,
         "source": "NWS",
+        "product": "forecastHourly",
         "generated_at": generated_at.isoformat(),
         "issued_at": issued_at,
         "grid_id": points_payload["properties"].get("gridId"),
