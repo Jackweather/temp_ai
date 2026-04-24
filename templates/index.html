@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HRRR Saratoga Springs Temperature</title>
+    <style>
+        :root {
+            --ink: #14213d;
+            --teal: #0b7285;
+            --mist: #eef7f7;
+            --sun: #f4a261;
+            --paper: #fffdf8;
+            --line: rgba(20, 33, 61, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Georgia, "Times New Roman", serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(244, 162, 97, 0.28), transparent 28%),
+                linear-gradient(180deg, #f7fbff 0%, var(--paper) 52%, #f4efe6 100%);
+        }
+
+        main {
+            width: min(1120px, calc(100% - 32px));
+            margin: 32px auto;
+            display: grid;
+            gap: 20px;
+        }
+
+        .hero,
+        .panel {
+            background: rgba(255, 253, 248, 0.88);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            box-shadow: 0 18px 40px rgba(20, 33, 61, 0.08);
+        }
+
+        .hero {
+            padding: 28px;
+        }
+
+        h1,
+        h2 {
+            margin: 0;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .hero p {
+            margin: 12px 0 0;
+            max-width: 70ch;
+            line-height: 1.6;
+        }
+
+        .meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-top: 22px;
+        }
+
+        .meta-card {
+            padding: 16px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(11, 114, 133, 0.08), rgba(11, 114, 133, 0.02));
+            border: 1px solid rgba(11, 114, 133, 0.14);
+        }
+
+        .meta-card.warm {
+            background: linear-gradient(180deg, rgba(244, 162, 97, 0.18), rgba(244, 162, 97, 0.06));
+            border-color: rgba(244, 162, 97, 0.28);
+        }
+
+        .meta-label {
+            display: block;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            opacity: 0.72;
+        }
+
+        .meta-value {
+            display: block;
+            margin-top: 8px;
+            font-size: 1.2rem;
+        }
+
+        .actions {
+            margin-top: 22px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 18px;
+            border-radius: 999px;
+            color: white;
+            text-decoration: none;
+            background: linear-gradient(135deg, var(--ink), var(--teal));
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            box-shadow: 0 12px 24px rgba(20, 33, 61, 0.18);
+        }
+
+        .button.alt {
+            background: linear-gradient(135deg, #7c5c38, var(--sun));
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+            gap: 20px;
+        }
+
+        .panel {
+            padding: 20px;
+        }
+
+        .chart-frame {
+            overflow: hidden;
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            background: white;
+        }
+
+        .chart-frame img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .archive-list {
+            margin: 16px 0 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 10px;
+            max-height: 520px;
+            overflow: auto;
+        }
+
+        .archive-list a {
+            display: block;
+            padding: 12px 14px;
+            border-radius: 14px;
+            color: var(--ink);
+            text-decoration: none;
+            background: var(--mist);
+            border: 1px solid rgba(20, 33, 61, 0.08);
+        }
+
+        .json-links {
+            margin: 16px 0 0;
+            padding: 0;
+            list-style: none;
+            display: grid;
+            gap: 10px;
+        }
+
+        .json-links a {
+            display: block;
+            padding: 12px 14px;
+            border-radius: 14px;
+            color: var(--ink);
+            text-decoration: none;
+            background: rgba(11, 114, 133, 0.08);
+            border: 1px solid rgba(11, 114, 133, 0.14);
+        }
+
+        .series-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+            font-size: 0.95rem;
+        }
+
+        .series-table th,
+        .series-table td {
+            text-align: left;
+            padding: 10px 8px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .series-table th {
+            font-weight: 600;
+        }
+
+        @media (max-width: 900px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <section class="hero">
+            <h1>HRRR Saratoga Springs Temperature</h1>
+            <p>
+                Latest HRRR 2 meter temperature forecast for Saratoga Springs, New York. The
+                newest plot is stored under <strong>/var/data/plots</strong>, each run is archived
+                under <strong>/var/data/archives</strong>, and older files are pruned automatically.
+            </p>
+            <div class="meta">
+                <div class="meta-card">
+                    <span class="meta-label">Run</span>
+                    <span class="meta-value">{{ manifest.run_date }} {{ "%02d"|format(manifest.cycle_hour) }}Z</span>
+                </div>
+                <div class="meta-card">
+                    <span class="meta-label">Location</span>
+                    <span class="meta-value">{{ manifest.location }}</span>
+                </div>
+                <div class="meta-card">
+                    <span class="meta-label">Forecast Points</span>
+                    <span class="meta-value">{{ manifest.point_count }}</span>
+                </div>
+                {% if nws_current %}
+                <div class="meta-card warm">
+                    <span class="meta-label">NWS Current Hourly</span>
+                    <span class="meta-value">{{ nws_current.temperature_f }} °F</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="actions">
+                <a class="button" href="{{ image_url }}" target="_blank" rel="noreferrer">Open PNG</a>
+                <a class="button alt" href="{{ archive_url }}">Download Latest JSON</a>
+                <a class="button" href="{{ url_for('serve_latest_nws_hourly') }}">Download Latest NWS JSON</a>
+            </div>
+        </section>
+
+        <section class="layout">
+            <article class="panel">
+                <h2>Latest Chart</h2>
+                <div class="chart-frame">
+                    <img src="{{ image_url }}" alt="Latest HRRR Saratoga Springs temperature chart">
+                </div>
+
+                <table class="series-table">
+                    <thead>
+                        <tr>
+                            <th>Valid Time Local</th>
+                            <th>Temperature</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for point in manifest.series %}
+                        <tr>
+                            <td>{{ point.valid_time_local|format_eastern_time }}</td>
+                            <td>{{ point.temperature_f }} °F</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </article>
+
+            <aside class="panel">
+                <h2>JSON Files</h2>
+                <ul class="json-links">
+                    <li><a href="{{ archive_url }}">Latest HRRR Run JSON</a></li>
+                    <li><a href="{{ url_for('serve_latest_nws_hourly') }}">Latest NWS Hourly JSON</a></li>
+                    {% if training_pairs %}
+                    <li><a href="{{ training_pairs.url }}">{{ training_pairs.name }}</a></li>
+                    {% endif %}
+                </ul>
+
+                <h2>Archived Runs</h2>
+                <ul class="archive-list">
+                    {% for archive in archives %}
+                    <li><a href="{{ archive.url }}">{{ archive.name }}</a></li>
+                    {% endfor %}
+                </ul>
+
+                {% if nws_archives %}
+                <h2 style="margin-top: 22px;">NWS Hourly JSON Archive</h2>
+                <ul class="archive-list">
+                    {% for archive in nws_archives %}
+                    <li><a href="{{ archive.url }}">{{ archive.name }}</a></li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if nws_current %}
+                <h2 style="margin-top: 22px;">NWS Current Hourly</h2>
+                <p style="margin: 12px 0 6px; line-height: 1.6;">
+                    {{ nws_current.valid_time_local|format_eastern_time }}
+                </p>
+                <p style="margin: 0; line-height: 1.6;">
+                    {{ nws_current.temperature_f }} °F{% if nws_current.short_forecast %} | {{ nws_current.short_forecast }}{% endif %}
+                </p>
+                {% endif %}
+            </aside>
+        </section>
+    </main>
+</body>
+</html>
